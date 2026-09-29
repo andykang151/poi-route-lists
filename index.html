@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="POI Route Lists — per-category points of interest in no-backtracking visit order, with Signal-ready copy text.">
+<title>POI Route Lists</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{
+  --paper:#f4f0e6; --card:#fffdf7; --ink:#23272f; --muted:#6b7280;
+  --accent:#4338ca; --accent-soft:#eef2ff; --line:#e5e0d2; --danger:#b91c1c;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.5; padding-bottom:96px;
+}
+h1,h2,h3{font-family:Georgia,"Times New Roman","Songti SC",serif; margin:0}
+.wrap{max-width:720px; margin:0 auto; padding:0 14px}
+.site-header{background:#23272f; color:#f8f6ef; padding:20px 0 18px; margin-bottom:18px}
+.site-header h1{font-size:26px; letter-spacing:.5px}
+.site-header .sub{color:#c9c4b4; font-size:13px; margin-top:4px}
+.card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card h2{font-size:19px; margin-bottom:2px}
+.card .zh{color:var(--muted); font-size:13px; margin-bottom:12px}
+.row{display:flex; gap:8px}
+input[type=text]{flex:1; padding:11px 12px; font-size:16px; border:1px solid var(--line);
+  border-radius:10px; background:#fff; color:var(--ink)}
+input[type=text]:focus{outline:2px solid var(--accent); border-color:var(--accent)}
+button{font-size:15px; border:none; border-radius:10px; padding:11px 16px; cursor:pointer;
+  background:var(--accent); color:#fff; font-weight:600}
+button:disabled{opacity:.5; cursor:default}
+button.ghost{background:#fff; color:var(--accent); border:1px solid var(--accent)}
+button.small{padding:7px 12px; font-size:13px; border-radius:8px}
+.candidates{list-style:none; margin:10px 0 0; padding:0}
+.candidates li{padding:11px 12px; border:1px solid var(--line); border-radius:10px;
+  margin-bottom:8px; background:#fff; cursor:pointer; font-size:15px}
+.candidates li:hover,.candidates li:active{border-color:var(--accent); background:var(--accent-soft)}
+.hint{color:var(--muted); font-size:13px; margin:8px 0 0}
+.error{color:var(--danger); font-size:14px; margin:8px 0 0}
+/* tier segmented */
+.tier-row{display:flex; gap:8px; margin:4px 0 12px}
+.tier-row button{flex:1; background:#fff; color:var(--ink); border:1px solid var(--line); font-weight:500}
+.tier-row button.active{background:var(--accent); color:#fff; border-color:var(--accent)}
+.tier-note{font-size:12px; color:var(--muted); margin:-6px 0 12px}
+/* tabs */
+.tabs{display:flex; gap:8px; overflow-x:auto; padding:4px 2px 10px; -webkit-overflow-scrolling:touch}
+.tab{flex:0 0 auto; border:1px solid var(--line); background:#fff; color:var(--ink);
+  border-radius:999px; padding:8px 14px; font-size:14px; font-weight:500; white-space:nowrap}
+.tab.active{background:#23272f; color:#fff; border-color:#23272f}
+.tab .count{display:inline-block; min-width:22px; text-align:center; background:var(--accent-soft);
+  color:var(--accent); border-radius:999px; font-size:12px; padding:1px 6px; margin-left:6px; font-weight:700}
+.tab.active .count{background:#fff; color:#23272f}
+/* ticket */
+.ticket{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:14px}
+.ticket-head{padding:14px 16px 10px; border-bottom:2px dashed var(--line)}
+.ticket-head h3{font-size:18px}
+.ticket-head .meta{color:var(--muted); font-size:13px; margin-top:2px}
+.ticket-actions{display:flex; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap}
+.map{height:260px; width:100%; background:#e8e4d8; z-index:0}
+.stops{list-style:none; margin:0; padding:0}
+.stops li{display:flex; gap:10px; padding:11px 16px; border-bottom:1px solid var(--line); align-items:flex-start}
+.stops li:last-child{border-bottom:none}
+.stops li.removed{display:none}
+.num{flex:0 0 auto; font-size:20px; line-height:1.2; min-width:30px; text-align:center}
+.stop-body{flex:1; min-width:0}
+.stop-name{font-weight:600; font-size:15px}
+.stop-addr{color:var(--muted); font-size:13px; margin-top:2px; word-break:break-word}
+.stop-links{flex:0 0 auto; display:flex; gap:6px; align-items:center}
+.stop-links a{font-size:13px; color:var(--accent); text-decoration:none; border:1px solid var(--accent);
+  border-radius:8px; padding:5px 10px; white-space:nowrap}
+.rm{border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:8px;
+  padding:5px 9px; font-size:13px}
+.ticket-foot{padding:10px 16px; color:var(--muted); font-size:13px; background:#faf8f1}
+.caveat{background:#fffbeb; border:1px solid #f5d67b; color:#8a6d1a; font-size:13px;
+  border-radius:10px; padding:9px 12px; margin:10px 16px}
+/* sticky copy-all */
+#copyall{position:fixed; left:0; right:0; bottom:0; z-index:50;
+  background:rgba(35,39,47,.97); color:#fff; padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  display:flex; gap:10px; align-items:center; box-shadow:0 -2px 12px rgba(0,0,0,.2)}
+#copyall .info{flex:1; font-size:13px; color:#d6d2c4}
+#copyall[hidden]{display:none}
+/* toast */
+#toast{position:fixed; left:50%; bottom:90px; transform:translateX(-50%) translateY(20px);
+  background:#23272f; color:#fff; padding:10px 18px; border-radius:999px; font-size:14px;
+  opacity:0; transition:all .25s; z-index:60; pointer-events:none; white-space:nowrap}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+footer.site{color:var(--muted); font-size:12px; text-align:center; padding:18px 20px 8px; line-height:1.7}
+/* leaflet numbered pins */
+.num-pin{background:var(--accent); color:#fff; border:2px solid #fff; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;
+  box-shadow:0 1px 4px rgba(0,0,0,.35); font-family:inherit}
+.status{padding:26px 16px; text-align:center; color:var(--muted); font-size:14px}
+.spinner{display:inline-block; width:18px; height:18px; border:3px solid var(--line);
+  border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:-4px; margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <h1>📍 POI Route Lists</h1>
+    <div class="sub">POI 路线清单 · no-backtracking visit order · Signal-ready copy</div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="card" id="search-card">
+    <h2>1 · Search city <span class="zh">搜索城市</span></h2>
+    <div class="zh">US cities only · 仅限美国城市</div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="city-input" placeholder="e.g. Jackson, MS" autocomplete="off" enterkeyhint="search">
+      <button id="city-search-btn">Search<br><span style="font-size:11px;font-weight:400">搜索</span></button>
+    </div>
+    <ul class="candidates" id="candidates" hidden></ul>
+    <p class="hint" id="city-current" hidden></p>
+    <p class="error" id="city-error" hidden></p>
+  </section>
+
+  <section class="card" id="tier-card" hidden>
+    <h2>2 · Stops per list <span class="zh">每类数量</span></h2>
+    <div class="zh">How many stops per category · 每个类别取多少个点</div>
+    <div class="tier-row" style="margin-top:10px" id="tier-row">
+      <button data-tier="25" class="active">25</button>
+      <button data-tier="50">50</button>
+      <button data-tier="all">All 全部</button>
+    </div>
+    <p class="tier-note" id="tier-note">"All" searches 4 quadrants around the city center for denser coverage. · “全部”会分4个象限搜索，覆盖更全。</p>
+    <div class="row">
+      <button id="generate-btn" style="flex:1">Generate lists<br><span style="font-size:11px;font-weight:400">生成清单</span></button>
+      <button id="new-search-btn" class="ghost">New city<br><span style="font-size:11px;font-weight:400">换城市</span></button>
+    </div>
+  </section>
+
+  <section id="results" hidden>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div id="panels"></div>
+  </section>
+
+</main>
+
+<div id="copyall" hidden>
+  <div class="info" id="copyall-info"></div>
+  <button id="copyall-btn" class="small" style="background:#fff;color:#23272f">Copy all 复制全部</button>
+</div>
+
+<div id="toast"></div>
+
+<footer class="site">
+  Place data © OpenStreetMap contributors, via Photon.<br>
+  地点数据 © OpenStreetMap 贡献者，经由 Photon 提供。<br>
+  Distances are straight-line estimates (≈ miles), not driving distances. OSM coverage varies by city.<br>
+  距离为直线估算（≈ 英里），非驾车距离；各城市数据覆盖度不同。
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+/* ================= config ================= */
+const LS_KEY = 'poiRouteLists.web.v1';
+const CATEGORIES = [
+  { key:'cityhalls', en:'City Halls',        zh:'市政厅',   glyph:'🏛️', query:'City Hall' },
+  { key:'police',    en:'Police Departments',zh:'警察局',   glyph:'🚔', query:'Police Department' },
+  { key:'schools',   en:'Schools',           zh:'学校',     glyph:'🏫', query:'School' },
+  { key:'medical',   en:'Medical Centers',   zh:'医疗中心', glyph:'🏥', query:'Medical Center' },
+  { key:'nails',     en:'Nail Stores',       zh:'美甲店',   glyph:'💅', query:'Nail Salon' },
+];
+const TIERS = { '25':25, '50':50, 'all':'all' };
+
+/* ================= state ================= */
+let state = { city:null, tier:'25', lists:{} };   // lists[key] = {status, stops:[], error, progress}
+let activeTab = CATEGORIES[0].key;
+const maps = {};      // key -> {map, layer}
+const $ = id => document.getElementById(id);
+
+function save(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    if(!s || !s.city) return false;
+    state = s;
+    return true;
+  } catch(e){ return false; }
+}
+function clearState(){
+  state = { city:null, tier: state.tier || '25', lists:{} };
+  save();
+}
+
+/* ================= utils ================= */
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function gmapsUrl(name, address){
+  return 'https://www.google.com/maps/search/?api=1&query=' +
+    encodeURIComponent([name, address].filter(Boolean).join(' '));
+}
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+async function copyText(t){
+  try {
+    await navigator.clipboard.writeText(t);
+    return true;
+  } catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch(_){}
+    ta.remove();
+    return ok;
+  }
+}
+
+/* ================= verified pure functions ================= */
+function haversineMiles(a, b){
+  const R = 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const s = Math.sin(dLat/2)**2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function pathLength(order, pts){
+  let total = 0;
+  for(let i=1;i<order.length;i++) total += haversineMiles(pts[order[i-1]], pts[order[i]]);
+  return total;
+}
+function routeOrder(pts){
+  const n = pts.length;
+  if(n <= 2) return pts.map((_,i)=>i);
+  let best = null, bestLen = Infinity;
+  for(let s=0;s<n;s++){
+    const unvisited = new Set(pts.map((_,i)=>i));
+    const order = [s];
+    unvisited.delete(s);
+    let cur = s;
+    while(unvisited.size){
+      let nb=-1, nbD=Infinity;
+      for(const j of unvisited){
+        const d = haversineMiles(pts[cur], pts[j]);
+        if(d < nbD){ nbD = d; nb = j; }
+      }
+      order.push(nb); unvisited.delete(nb); cur = nb;
+    }
+    const len = pathLength(order, pts);
+    if(len < bestLen){ bestLen = len; best = order; }
+  }
+  let improved = true, guard = 0;
+  while(improved && guard++ < 50){
+    improved = false;
+    for(let i=0;i<n-2;i++){
+      for(let k=i+2;k<n;k++){
+        const a=pts[best[i]], b=pts[best[i+1]], c=pts[best[k-1]], d=pts[best[k]];
+        const curD = haversineMiles(a,b) + haversineMiles(c,d);
+        const altD = haversineMiles(a,c) + haversineMiles(b,d);
+        if(altD < curD - 1e-9){
+          const seg = best.slice(i+1,k).reverse();
+          best.splice(i+1, k-i-1, ...seg);
+          improved = true;
+        }
+      }
+    }
+  }
+  return best;
+}
+function keycap(n){
+  return String(n).split('').map(d => d + '️⃣').join('');
+}
+function formatAddress(p){
+  const line1 = [p.housenumber, p.street].filter(Boolean).join(' ');
+  const city = p.city || p.town || p.village || p.municipality || '';
+  const line2 = ([city, p.state].filter(Boolean).join(', ')) + (p.postcode ? ' ' + p.postcode : '');
+  return [line1, line2.trim()].filter(s => s && s !== ',').join(', ');
+}
+function dedupePois(pois){
+  const seen = new Set(), out = [];
+  for(const p of pois){
+    const key = (p.osm_type && p.osm_id) ? (p.osm_type + ':' + p.osm_id)
+      : (p.lat.toFixed(5) + ',' + p.lon.toFixed(5));
+    if(seen.has(key)) continue;
+    seen.add(key); out.push(p);
+  }
+  return out;
+}
+function shortCityLabel(r){
+  const a = r.address || {};
+  const city = a.city || a.town || a.village || a.municipality || r.name || '';
+  let st = '';
+  const m = String(a['ISO3166-2-lvl4'] || '').match(/^US-(.+)$/);
+  if(m) st = m[1];
+  if(city && st) return city + ', ' + st;
+  return String(r.display_name || '').split(',').slice(0,2).join(',').trim();
+}
+
+/* ================= throttled API ================= */
+const lastCall = {};
+async function throttledFetch(url, host, gapMs){
+  const wait = Math.max(0, (lastCall[host] || 0) + gapMs - Date.now());
+  if(wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastCall[host] = Date.now();
+  return fetch(url, { headers:{ 'Accept':'application/json' } });
+}
+
+async function searchCity(q){
+  const u = new URL('https://nominatim.openstreetmap.org/search');
+  u.searchParams.set('q', q);
+  u.searchParams.set('countrycodes', 'us');
+  u.searchParams.set('format', 'json');
+  u.searchParams.set('addressdetails', '1');
+  u.searchParams.set('limit', '8');
+  const res = await throttledFetch(u.toString(), 'nominatim.openstreetmap.org', 1100);
+  if(!res.ok) throw new Error('City search failed (HTTP ' + res.status + ')');
+  return res.json();
+}
+
+async function photonSearch(q, lat, lon, bbox){
+  const u = new URL('https://photon.komoot.io/api/');
+  u.searchParams.set('q', q);
+  u.searchParams.set('lat', String(lat));
+  u.searchParams.set('lon', String(lon));
+  u.searchParams.set('limit', '50');
+  if(bbox) u.searchParams.set('bbox', bbox.join(','));
+  const res = await throttledFetch(u.toString(), 'photon.komoot.io', 350);
+  if(!res.ok) throw new Error('POI search failed (HTTP ' + res.status + ')');
+  const j = await res.json();
+  return j.features || [];
+}
+
+// 4 quadrants around the city center; Photon bbox = min_lon,min_lat,max_lon,max_lat
+function quadrantBboxes(lat, lon, delta){
+  delta = delta || 0.12;
+  return [
+    [lon, lat, lon+delta, lat+delta],        // NE
+    [lon-delta, lat, lon, lat+delta],        // NW
+    [lon, lat-delta, lon+delta, lat],        // SE
+    [lon-delta, lat-delta, lon, lat],        // SW
+  ];
+}
+
+function featureToPoi(f){
+  const p = f.properties || {};
+  const coords = (f.geometry && f.geometry.coordinates) || [];
+  if(coords.length < 2) return null;
+  const name = (p.name || '').trim();
+  if(!name) return null;
+  return {
+    id: (p.osm_type && p.osm_id) ? (p.osm_type + ':' + p.osm_id)
+        : (coords[1].toFixed(5) + ',' + coords[0].toFixed(5)),
+    name: name,
+    address: formatAddress(p),
+    lat: coords[1],
+    lon: coords[0],
+    removed: false,
+  };
+}
+
+function setProgress(key, text){
+  const L = state.lists[key];
+  if(L) L.progress = text;
+  const el = document.querySelector('[data-panel="' + key + '"] .status');
+  if(el) el.innerHTML = '<span class="spinner"></span>' + esc(text);
+}
+
+async function fetchCategory(cat){
+  const lat = state.city.lat, lon = state.city.lon;
+  const tier = state.tier;
+  let features = [];
+  if(tier === 'all'){
+    const boxes = quadrantBboxes(lat, lon);
+    let qi = 0;
+    for(const b of boxes){
+      setProgress(cat.key, 'Searching area ' + (++qi) + ' of 4… 搜索区域 ' + qi + '/4…');
+      const f = await photonSearch(cat.query, lat, lon, b);
+      features.push.apply(features, f);
+    }
+  } else {
+    setProgress(cat.key, 'Searching… 搜索中…');
+    features = await photonSearch(cat.query, lat, lon, null);
+  }
+  let pois = dedupePois(features.map(featureToPoi).filter(Boolean));
+  if(tier !== 'all') pois = pois.slice(0, parseInt(tier, 10));
+  return pois;
+}
+
+async function generate(){
+  if(!state.city) return;
+  const btn = $('generate-btn');
+  btn.disabled = true;
+  for(const cat of CATEGORIES){
+    state.lists[cat.key] = { status:'loading', progress:'', stops:[] };
+  }
+  save();
+  renderResults();
+  for(const cat of CATEGORIES){
+    try {
+      const pois = await fetchCategory(cat);
+      const order = routeOrder(pois);
+      const stops = order.map(i => {
+        const p = pois[i];
+        p.mapsUrl = gmapsUrl(p.name, p.address);
+        return p;
+      });
+      state.lists[cat.key] = { status:'done', stops:stops };
+    } catch(e){
+      state.lists[cat.key] = { status:'error', error:(e && e.message) || 'Request failed', stops:[] };
+    }
+    save();
+    renderPanel(cat.key);
+    renderTabs();
+    updateCopyAll();
+  }
+  btn.disabled = false;
+}
+
+/* ================= copy text ================= */
+function visibleStops(key){
+  const L = state.lists[key];
+  return (L && L.stops ? L.stops : []).filter(s => !s.removed);
+}
+function totalMiles(stops){
+  let t = 0;
+  for(let i=1;i<stops.length;i++) t += haversineMiles(stops[i-1], stops[i]);
+  return t;
+}
+function listText(cat){
+  const stops = visibleStops(cat.key);
+  const lines = [cat.glyph + ' ' + cat.en + ' — ' + state.city.label, ''];
+  stops.forEach((s, i) => {
+    lines.push(keycap(i+1) + ' ' + s.name);
+    if(s.address) lines.push(s.address);
+    lines.push(s.mapsUrl);
+    lines.push('');
+  });
+  lines.push(stops.length + ' stops · ≈' + totalMiles(stops).toFixed(1) + ' miles (straight-line)');
+  return lines.join('\n');
+}
+function allListsText(){
+  return CATEGORIES
+    .filter(c => visibleStops(c.key).length > 0)
+    .map(listText)
+    .join('\n\n');
+}
+
+/* ================= tabs & panels ================= */
+function renderTabs(){
+  const tabs = $('tabs');
+  tabs.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const n = visibleStops(cat.key).length;
+    const b = document.createElement('button');
+    b.className = 'tab' + (cat.key === activeTab ? ' active' : '');
+    b.setAttribute('role', 'tab');
+    b.innerHTML = esc(cat.glyph + ' ' + cat.en) + ' <span class="count">' + n + '</span>';
+    b.title = cat.zh;
+    b.addEventListener('click', () => showTab(cat.key));
+    tabs.appendChild(b);
+  });
+}
+function renderResults(){
+  $('results').hidden = false;
+  const panels = $('panels');
+  panels.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const d = document.createElement('div');
+    d.setAttribute('data-panel', cat.key);
+    d.hidden = cat.key !== activeTab;
+    d.innerHTML = '<div class="panel-body"></div>';
+    panels.appendChild(d);
+    renderPanel(cat.key);
+  });
+  renderTabs();
+  updateCopyAll();
+}
+function showTab(key){
+  activeTab = key;
+  document.querySelectorAll('#tabs .tab').forEach((el, i) => {
+    el.classList.toggle('active', CATEGORIES[i].key === key);
+  });
+  CATEGORIES.forEach(cat => {
+    const p = document.querySelector('[data-panel="' + cat.key + '"]');
+    if(p) p.hidden = cat.key !== key;
+  });
+  refreshMap(key);
+}
+function renderPanel(key){
+  const cat = CATEGORIES.find(c => c.key === key);
+  const panel = document.querySelector('[data-panel="' + key + '"] .panel-body');
+  if(!panel) return;
+  const L = state.lists[key];
+  if(!L || L.status === 'loading'){
+    panel.innerHTML = '<div class="ticket"><div class="status"><span class="spinner"></span>' +
+      esc((L && L.progress) || 'Searching… 搜索中…') + '</div></div>';
+    return;
+  }
+  if(L.status === 'error'){
+    panel.innerHTML = '<div class="ticket"><div class="status">⚠️ ' + esc(L.error) +
+      '<br><br><button class="ghost small" data-retry="' + key + '">Retry 重试</button></div></div>';
+    const rb = panel.querySelector('[data-retry]');
+    if(rb) rb.addEventListener('click', () => generateCategory(key));
+    return;
+  }
+  const stops = visibleStops(key);
+  const miles = totalMiles(stops);
+  let html = '<div class="ticket">';
+  html += '<div class="ticket-head"><h3>' + esc(cat.glyph + ' ' + cat.en) +
+    ' <span style="font-weight:400;color:var(--muted);font-size:14px">' + esc(cat.zh) + '</span></h3>' +
+    '<div class="meta">' + esc(state.city.label) + ' · ' + stops.length + ' stops · ≈' +
+    miles.toFixed(1) + ' miles, straight-line 直线估算</div></div>';
+  html += '<div class="ticket-actions">' +
+    '<button class="small" data-copy="' + key + '">Copy list 复制清单</button>' +
+    '<button class="ghost small" data-reset="' + key + '">Reset 还原</button></div>';
+  html += '<div class="map" id="map-' + key + '"></div>';
+  if(state.tier === 'all'){
+    html += '<div class="caveat">⚠️ Results may be truncated in dense areas. 数据密集区域结果可能不完整。</div>';
+  }
+  if(stops.length === 0){
+    html += '<div class="status">No stops — all removed, or nothing found.<br>没有结果（或已全部移除）。</div>';
+  } else {
+    html += '<ul class="stops">';
+    stops.forEach((s, i) => {
+      const idx = L.stops.indexOf(s);
+      html += '<li><div class="num">' + keycap(i + 1) + '</div>' +
+        '<div class="stop-body"><div class="stop-name">' + esc(s.name) + '</div>' +
+        (s.address ? '<div class="stop-addr">' + esc(s.address) + '</div>' : '') + '</div>' +
+        '<div class="stop-links"><a href="' + esc(s.mapsUrl) + '" target="_blank" rel="noopener">Maps 地图</a>' +
+        '<button class="rm" data-rm="' + key + ':' + idx + '" title="Remove 移除">✕</button></div></li>';
+    });
+    html += '</ul>';
+  }
+  html += '<div class="ticket-foot">' + stops.length + ' stops · ≈' + miles.toFixed(1) +
+    ' miles (straight-line 直线距离，非驾车)</div></div>';
+  panel.innerHTML = html;
+
+  panel.querySelectorAll('[data-copy]').forEach(b =>
+    b.addEventListener('click', async () => { toast(await copyText(listText(cat)) ? 'Copied ✓ 已复制' : 'Copy failed 复制失败'); }));
+  panel.querySelectorAll('[data-reset]').forEach(b =>
+    b.addEventListener('click', () => {
+      state.lists[key].stops.forEach(s => s.removed = false);
+      save(); renderPanel(key); renderTabs(); updateCopyAll();
+    }));
+  panel.querySelectorAll('[data-rm]').forEach(b =>
+    b.addEventListener('click', () => {
+      const parts = b.getAttribute('data-rm').split(':');
+      const s = state.lists[parts[0]].stops[parseInt(parts[1], 10)];
+      if(s) s.removed = true;
+      save(); renderPanel(key); renderTabs(); updateCopyAll();
+    }));
+  refreshMap(key);
+}
+async function generateCategory(key){
+  const cat = CATEGORIES.find(c => c.key === key);
+  state.lists[key] = { status:'loading', progress:'', stops:[] };
+  save(); renderPanel(key); renderTabs();
+  try {
+    const pois = await fetchCategory(cat);
+    const order = routeOrder(pois);
+    state.lists[key] = { status:'done', stops: order.map(i => {
+      const p = pois[i]; p.mapsUrl = gmapsUrl(p.name, p.address); return p;
+    })};
+  } catch(e){
+    state.lists[key] = { status:'error', error:(e && e.message) || 'Request failed', stops:[] };
+  }
+  save(); renderPanel(key); renderTabs(); updateCopyAll();
+}
+
+/* ================= maps ================= */
+function refreshMap(key){
+  const panel = document.querySelector('[data-panel="' + key + '"]');
+  if(!panel || panel.hidden) return;
+  const stops = visibleStops(key);
+  const mapEl = $('map-' + key);
+  if(!mapEl || stops.length === 0) return;
+  let m = maps[key];
+  if(!m){
+    m = {
+      map: L.map(mapEl, { scrollWheelZoom:false }),
+      layer: L.layerGroup(),
+    };
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(m.map);
+    m.layer.addTo(m.map);
+    // tap again to enable scroll zoom
+    m.map.on('click', () => m.map.scrollWheelZoom.enable());
+    maps[key] = m;
+  }
+  m.layer.clearLayers();
+  const latlngs = stops.map(s => [s.lat, s.lon]);
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lon], {
+      icon: L.divIcon({ className:'num-pin', html:String(i+1), iconSize:[30,30], iconAnchor:[15,15] }),
+      title: s.name,
+    }).bindPopup('<b>' + esc(s.name) + '</b><br>' + esc(s.address || '')).addTo(m.layer);
+  });
+  if(latlngs.length > 1){
+    L.polyline(latlngs, { color:'#4338ca', weight:3, opacity:0.75 }).addTo(m.layer);
+    m.map.fitBounds(L.latLngBounds(latlngs).pad(0.18));
+  } else {
+    m.map.setView(latlngs[0], 14);
+  }
+  requestAnimationFrame(() => m.map.invalidateSize());
+}
+
+/* ================= copy-all bar ================= */
+function updateCopyAll(){
+  let total = 0, lists = 0;
+  CATEGORIES.forEach(c => {
+    const n = visibleStops(c.key).length;
+    if(n > 0){ total += n; lists++; }
+  });
+  const bar = $('copyall');
+  if(total > 0){
+    bar.hidden = false;
+    $('copyall-info').textContent = total + ' stops · ' + lists + ' lists 清单已就绪';
+  } else {
+    bar.hidden = true;
+  }
+}
+
+/* ================= city search UI ================= */
+async function doCitySearch(){
+  const q = $('city-input').value.trim();
+  if(!q){ toast('Enter a city name 输入城市名'); return; }
+  const btn = $('city-search-btn');
+  btn.disabled = true;
+  $('city-error').hidden = true;
+  const ul = $('candidates');
+  ul.hidden = false;
+  ul.innerHTML = '<li>Searching… 搜索中…</li>';
+  try {
+    const results = await searchCity(q);
+    if(!results.length){
+      ul.innerHTML = '<li>No US city found. 未找到美国城市。</li>';
+    } else {
+      ul.innerHTML = '';
+      results.forEach(r => {
+        const li = document.createElement('li');
+        li.textContent = r.display_name;
+        li.addEventListener('click', () => selectCity(r));
+        ul.appendChild(li);
+      });
+    }
+  } catch(e){
+    $('city-error').textContent = '⚠️ ' + (e.message || 'Search failed');
+    $('city-error').hidden = false;
+    ul.hidden = true;
+  }
+  btn.disabled = false;
+}
+function selectCity(r){
+  state.city = {
+    label: shortCityLabel(r),
+    lat: parseFloat(r.lat),
+    lon: parseFloat(r.lon),
+  };
+  state.lists = {};
+  save();
+  $('candidates').hidden = true;
+  const cc = $('city-current');
+  cc.hidden = false;
+  cc.textContent = '📍 ' + state.city.label + '  — tap Generate below, or pick another city above.';
+  $('tier-card').hidden = false;
+  $('results').hidden = true;
+  $('copyall').hidden = true;
+  // clear old maps
+  Object.keys(maps).forEach(k => { try { maps[k].map.remove(); } catch(e){} delete maps[k]; });
+  toast('City set ✓ 已选定城市');
+}
+function resetToCity(){
+  clearState();
+  $('candidates').hidden = true;
+  $('candidates').innerHTML = '';
+  $('city-current').hidden = true;
+  $('city-error').hidden = true;
+  $('tier-card').hidden = true;
+  $('results').hidden = true;
+  $('copyall').hidden = true;
+  Object.keys(maps).forEach(k => { try { maps[k].map.remove(); } catch(e){} delete maps[k]; });
+}
+
+/* ================= init ================= */
+function init(){
+  $('city-search-btn').addEventListener('click', doCitySearch);
+  $('city-input').addEventListener('keydown', e => { if(e.key === 'Enter') doCitySearch(); });
+  $('generate-btn').addEventListener('click', generate);
+  $('new-search-btn').addEventListener('click', resetToCity);
+  $('copyall-btn').addEventListener('click', async () => {
+    toast(await copyText(allListsText()) ? 'Copied all ✓ 全部已复制' : 'Copy failed 复制失败');
+  });
+  document.querySelectorAll('#tier-row button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#tier-row button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const t = b.getAttribute('data-tier');
+      if(state.tier !== t){
+        state.tier = t;
+        state.lists = {};
+        save();
+        $('results').hidden = true;
+        $('copyall').hidden = true;
+        Object.keys(maps).forEach(k => { try { maps[k].map.remove(); } catch(e){} delete maps[k]; });
+        if(state.city) toast('Tier changed — tap Generate 数量已切换，请重新生成');
+      }
+    });
+  });
+
+  if(load()){
+    // restore previous session
+    $('city-current').hidden = false;
+    $('city-current').textContent = '📍 ' + state.city.label;
+    $('tier-card').hidden = false;
+    document.querySelectorAll('#tier-row button').forEach(x =>
+      x.classList.toggle('active', x.getAttribute('data-tier') === state.tier));
+    const hasData = CATEGORIES.some(c => state.lists[c.key] && state.lists[c.key].status === 'done');
+    if(hasData){
+      const first = CATEGORIES.find(c => state.lists[c.key] && state.lists[c.key].status === 'done');
+      if(first) activeTab = first.key;
+      renderResults();
+      showTab(activeTab);
+    }
+    // re-mark interrupted loads as errors
+    let fixed = false;
+    CATEGORIES.forEach(c => {
+      const L = state.lists[c.key];
+      if(L && L.status === 'loading'){ L.status = 'error'; L.error = 'Interrupted — tap Generate to retry.'; fixed = true; }
+    });
+    if(fixed){ save(); renderResults(); }
+  }
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
